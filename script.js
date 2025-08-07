@@ -12,3 +12,15 @@ var map = L.map('map', {
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
+
+// Load data from JSON and draw on map
+fetch('data.json')
+  .then(response => response.json())
+  .then(data => {
+    data.forEach(road => {
+      let color = road.status === "flooded" ? "red" : "green";
+      L.polyline(road.coordinates, { color: color, weight: 6 })
+        .bindPopup(`${road.road} - ${road.status}`)
+        .addTo(map);
+    });
+  });

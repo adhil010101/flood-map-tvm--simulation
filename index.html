@@ -40,7 +40,7 @@
       border-radius: 12px;
       top: 10px;
       left: 10px;
-      width: 300px;
+      width: 320px;
       color: var(--text-color);
       box-shadow: 0 0 20px rgba(0,255,255,0.4);
     }
@@ -61,6 +61,12 @@
     }
     #info, #weather {
       font-size: 14px;
+      margin-top: 12px;
+    }
+    #extraButtons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
       margin-top: 12px;
     }
     .arrow {
@@ -104,7 +110,11 @@
     <option value="8.4861,76.9496">Shangumugham</option>
   </select>
   <button onclick="calculateRoute()">Get Route</button>
-  <button id="darkToggle" onclick="toggleDarkMode()">Toggle Light/Dark Mode</button>
+  <div id="extraButtons">
+    <button onclick="showFakeFloodAreas()">Show Fake Flooded Areas</button>
+    <button onclick="clearRoute()">Clear Route</button>
+    <button id="darkToggle" onclick="toggleDarkMode()">Toggle Light/Dark Mode</button>
+  </div>
   <div id="info"></div>
   <div id="weather"></div>
 </div>
@@ -116,8 +126,9 @@
   const apiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0=";
   const weatherApiKey = "b3bbd7748a865056c51ac3458d4851bc";
   let routeLayer = null;
-  const trivandrumBounds = L.latLngBounds([8.3, 76.7], [8.7, 77.2]);
+  let floodLayers = [];
 
+  const trivandrumBounds = L.latLngBounds([8.3, 76.7], [8.7, 77.2]);
   const map = L.map('map', {
     maxBounds: trivandrumBounds,
     minZoom: 11,
@@ -182,6 +193,32 @@
 
   function toggleDarkMode() {
     document.body.classList.toggle("light-mode");
+  }
+
+  function showFakeFloodAreas() {
+    floodLayers.forEach(l => map.removeLayer(l));
+    floodLayers = [];
+    const floodedCoords = [
+      [8.52, 76.94],
+      [8.505, 76.95],
+      [8.515, 76.93]
+    ];
+    floodedCoords.forEach(coord => {
+      const floodCircle = L.circle(coord, {
+        color: 'red',
+        fillColor: 'red',
+        fillOpacity: 0.5,
+        radius: 300
+      }).addTo(map).bindPopup("Flooded Area");
+      floodLayers.push(floodCircle);
+    });
+  }
+
+  function clearRoute() {
+    if (routeLayer) map.removeLayer(routeLayer);
+    routeLayer = null;
+    document.getElementById("info").innerHTML = "";
+    document.getElementById("weather").innerHTML = "";
   }
 </script>
 </body>

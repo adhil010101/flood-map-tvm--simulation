@@ -122,8 +122,14 @@
   const trivandrumBounds = L.latLngBounds([8.3, 76.7], [8.7, 77.2]);
   const map = L.map('map', {
     maxBounds: trivandrumBounds,
-    maxBoundsViscosity: 1.0
+    maxBoundsViscosity: 1.0,
+    minZoom: 11,
+    zoomSnap: 0.25
   }).setView([8.52, 76.94], 12);
+
+  map.on('drag', function () {
+    map.panInsideBounds(trivandrumBounds, { animate: false });
+  });
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: 'Map data © OpenStreetMap contributors'
@@ -158,13 +164,16 @@
 
     if (!start || !end) return alert("Invalid start or end point.");
 
-    fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+    const payload = JSON.stringify({ coordinates: [[start[1], start[0]], [end[1], end[0]]] });
+
+    // Optimized route fetching
+    fetch("https://api.openrouteservice.org/v2/directions/driving-car?geometry_format=geojson&instructions=false", {
       method: "POST",
       headers: {
         'Authorization': apiKey,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ coordinates: [[start[1], start[0]], [end[1], end[0]]] })
+      body: payload
     })
     .then(res => res.json())
     .then(data => {
@@ -183,7 +192,7 @@
 
       floodAlert.innerHTML = "<strong style='color:red;'>Alert:</strong> Flooded road detected. Showing alternate route...";
 
-      fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+      fetch("https://api.openrouteservice.org/v2/directions/driving-car?geometry_format=geojson&instructions=false", {
         method: "POST",
         headers: {
           'Authorization': apiKey,

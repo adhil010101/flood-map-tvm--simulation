@@ -40,6 +40,81 @@ fetch('data.json')
         .addTo(map);
     });
   });
+const ROUTES = {
+  "neyyatinkara-airport": {
+    start: [8.3986, 77.0806], // Neyyattinkara
+    end: [8.4826, 76.9203],   // Trivandrum Airport
+    floodSegment: [           // Simulated flooded section
+      [8.4500, 76.9500],
+      [8.4600, 76.9400],
+      [8.4700, 76.9300]
+    ]
+  }
+};
+
+function handleRoute() {
+  markerGroup.clearLayers(); // Clear old routes
+  map.eachLayer(layer => {
+    if (layer instanceof L.Polyline && !layer._leaflet_id.toString().startsWith("base")) {
+      map.removeLayer(layer);
+    }
+  });
+
+  const selected = document.getElementById("route").value;
+  if (!selected || !ROUTES[selected]) return;
+
+  const route = ROUTES[selected];
+  const apiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0="; // 👈 Replace this
+
+  // Show original route
+  getORSRoute(route.start, route.end, "blue", apiKey, () => {
+    // Then simulate flood
+    simulateFlood(route.floodSegment);
+    
+    // Then show alternate route
+    getORSRoute(route.start, route.end, "green", apiKey, route.floodSegment);
+  });
+
+  // Add markers
+  L.marker(route.start).bindPopup("Start").addTo(markerGroup);
+  L.marker(route.end).bindPopup("Destination").addTo(markerGroup);
+}
+
+function getORSRoute(start, end, color, apiKey, avoidCoords = null) {
+  const url = `https://api.openrouteservice.org/v2/directions/driving-car/geojson`;
+  const body = {
+    coordinates: [start, end]
+  };
+
+  if (avoidCoords && Array.isArray(avoidCoords)) {
+    body.avoid_polygons = {
+      type: "Polygon",
+      coordinates: [[...avoidCoords, avoidCoords[0]]] // Loop it back
+    };
+  }
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  })
+  .then(res => res.json())
+  .then(data => {
+    const coords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    L.polyline(coords, { color: color, weight: 5 }).addTo(map)
+      .bindPopup(color === "blue" ? "Original Route" : "Alternate Route");
+  });
+}
+
+function simulateFlood(segment) {
+  L.polyline(segment, { color: "red", weight: 6 })
+    .addTo(map)
+    .bindPopup("Flooded Segment");
+}
+
 
 function getRoute(start, end) {
   const apiKey = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0='; // Replace with your real key

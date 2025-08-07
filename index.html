@@ -4,79 +4,67 @@
   <title>Flood Alert - Trivandrum</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
   <style>
     body, html {
       margin: 0;
       padding: 0;
-      font-family: 'Poppins', sans-serif;
-      background: linear-gradient(to right, #e0f7fa, #ffffff);
-    }
-    #controls {
-      position: absolute;
-      z-index: 1000;
-      background: #ffffffcc;
-      padding: 20px;
-      border-radius: 16px;
-      top: 20px;
-      left: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      width: 300px;
-      animation: slideDown 1s ease;
-    }
-    @keyframes slideDown {
-      from { transform: translateY(-20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a1a;
+      color: #fff;
     }
     #map {
       width: 100vw;
       height: 100vh;
     }
-    select, button, input[type="text"] {
+    #controls {
+      position: absolute;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 20px;
+      border-radius: 12px;
+      top: 10px;
+      left: 10px;
+      width: 300px;
+      color: #fff;
+      box-shadow: 0 0 20px rgba(0,255,255,0.4);
+    }
+    select, button, input {
       width: 100%;
       padding: 10px;
-      margin: 10px 0;
-      border-radius: 10px;
-      border: 1px solid #999;
-      font-size: 14px;
-      box-shadow: inset 0 1px 2px #ccc;
-    }
-    button {
-      background-color: #1976d2;
-      color: white;
+      margin: 8px 0;
+      border-radius: 8px;
       border: none;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
+      background: #333;
+      color: white;
     }
     button:hover {
-      background-color: #0d47a1;
+      background: #0ff;
+      color: #000;
+      cursor: pointer;
+      transition: 0.3s;
     }
-    #info, #weather, #flood-alert {
-      margin-top: 12px;
+    #info, #weather {
       font-size: 14px;
-      animation: fadeIn 1s ease-in-out;
+      margin-top: 12px;
     }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+    .arrow {
+      width: 10px;
+      height: 10px;
+      background: yellow;
+      border-radius: 50%;
+      animation: blink 1s infinite;
     }
-    .legend {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      background: #fff;
-      padding: 10px;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      font-size: 13px;
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0; }
+      100% { opacity: 1; }
     }
-    .legend div { margin: 4px 0; }
   </style>
 </head>
 <body>
 <div id="controls">
-  <h3 style="margin-top: 0;">Flood Alert - Trivandrum</h3>
   <label>Starting Point:</label>
   <select id="start">
     <option value="current">Current Location</option>
@@ -88,7 +76,6 @@
     <option value="8.4986,76.9528">Pettah</option>
     <option value="8.4861,76.9496">Shangumugham</option>
   </select>
-
   <label>Destination:</label>
   <select id="end">
     <option value="8.4826,76.9203">Trivandrum Airport</option>
@@ -99,129 +86,69 @@
     <option value="8.4986,76.9528">Pettah</option>
     <option value="8.4861,76.9496">Shangumugham</option>
   </select>
-
-  <button onclick="calculateRoute()">Find Safe Route</button>
+  <button onclick="calculateRoute()">Get Route</button>
   <div id="info"></div>
   <div id="weather"></div>
-  <div id="flood-alert"></div>
 </div>
-
-<div class="legend">
-  <div><span style="color: blue; font-weight: bold;">Blue:</span> Main Route</div>
-  <div><span style="color: red; font-weight: bold;">Red:</span> Flooded Segment</div>
-  <div><span style="color: green; font-weight: bold;">Green:</span> Alternate Safe Route</div>
-</div>
-
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 <script>
-  const apiKey = "YOUR_OPENROUTESERVICE_API_KEY";
-  const weatherApiKey = "YOUR_OPENWEATHERMAP_API_KEY";
+  const apiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0=";
+  const weatherApiKey = "b3bbd7748a865056c51ac3458d4851bc";
 
   const trivandrumBounds = L.latLngBounds([8.3, 76.7], [8.7, 77.2]);
   const map = L.map('map', {
     maxBounds: trivandrumBounds,
-    maxBoundsViscosity: 1.0,
     minZoom: 11,
-    zoomSnap: 0.25
-  }).setView([8.52, 76.94], 12);
+    maxZoom: 18,
+    zoomControl: true
+  }).setView([8.52, 76.94], 13);
 
-  map.on('drag', function () {
-    map.panInsideBounds(trivandrumBounds, { animate: false });
-  });
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: 'Map data © OpenStreetMap contributors'
+  L.tileLayer(`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`, {
+    attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  let routeLine, floodLine, altRouteLine, userMarker;
-  let userLatLng = null;
+  const rainLayer = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${weatherApiKey}`, {
+    opacity: 0.6
+  }).addTo(map);
 
+  let userLatLng = null;
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       userLatLng = [lat, lng];
-      userMarker = L.marker(userLatLng).addTo(map).bindPopup("You are here").openPopup();
+      L.marker(userLatLng).addTo(map).bindPopup("You are here").openPopup();
     });
   }
 
   function calculateRoute() {
     const info = document.getElementById("info");
     const weatherBox = document.getElementById("weather");
-    const floodAlert = document.getElementById("flood-alert");
-
-    info.innerHTML = "<em>Loading route...</em>";
-    floodAlert.innerHTML = "";
-    if (routeLine) map.removeLayer(routeLine);
-    if (floodLine) map.removeLayer(floodLine);
-    if (altRouteLine) map.removeLayer(altRouteLine);
-
+    info.innerHTML = "Loading route...";
     const startVal = document.getElementById("start").value;
-    const end = document.getElementById("end").value.split(',').map(Number);
+    const endVal = document.getElementById("end").value;
+    const end = endVal.split(',').map(Number);
     const start = startVal === "current" && userLatLng ? userLatLng : startVal.split(',').map(Number);
-
     if (!start || !end) return alert("Invalid start or end point.");
 
-    const payload = JSON.stringify({ coordinates: [[start[1], start[0]], [end[1], end[0]]] });
-
-    // Optimized route fetching
-    fetch("https://api.openrouteservice.org/v2/directions/driving-car?geometry_format=geojson&instructions=false", {
-      method: "POST",
-      headers: {
-        'Authorization': apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: payload
-    })
-    .then(res => res.json())
-    .then(data => {
-      const coords = data.features[0].geometry.coordinates.map(p => [p[1], p[0]]);
-      routeLine = L.polyline(coords, { color: 'blue', weight: 5 }).addTo(map).bindPopup("Main Route");
-
-      const summary = data.features[0].properties.summary;
-      const speed = (summary.distance / summary.duration * 3.6).toFixed(2);
-      info.innerHTML = `<strong>Distance:</strong> ${(summary.distance/1000).toFixed(2)} km<br>
-                        <strong>Duration:</strong> ${(summary.duration/60).toFixed(1)} mins<br>
-                        <strong>Avg Speed:</strong> ${speed} km/h`;
-
-      const mid = Math.floor(coords.length / 2);
-      const floodSegment = coords.slice(mid - 2, mid + 2);
-      floodLine = L.polyline(floodSegment, { color: 'red', weight: 6, dashArray: '5, 10' }).addTo(map).bindPopup("Flooded Area");
-
-      floodAlert.innerHTML = "<strong style='color:red;'>Alert:</strong> Flooded road detected. Showing alternate route...";
-
-      fetch("https://api.openrouteservice.org/v2/directions/driving-car?geometry_format=geojson&instructions=false", {
-        method: "POST",
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          coordinates: [[start[1], start[0]], [end[1], end[0]]],
-          avoid_polygons: {
-            type: "Polygon",
-            coordinates: [[
-              ...floodSegment.map(c => [c[1], c[0]]),
-              [floodSegment[0][1], floodSegment[0][0]]
-            ]]
-          }
-        })
-      })
+    fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}&geometry_format=geojson&instructions=false`)
       .then(res => res.json())
       .then(data => {
-        const altCoords = data.features[0].geometry.coordinates.map(p => [p[1], p[0]]);
-        altRouteLine = L.polyline(altCoords, { color: 'green', weight: 5, dashArray: '10, 6' }).addTo(map).bindPopup("Alternate Route").openPopup();
+        const coords = data.features[0].geometry.coordinates.map(p => [p[1], p[0]]);
+        L.polyline(coords, { color: 'cyan', weight: 6, dashArray: '5, 10' }).addTo(map);
+        map.panInsideBounds(trivandrumBounds);
+        const summary = data.features[0].properties.summary;
+        info.innerHTML = `<strong>Distance:</strong> ${(summary.distance/1000).toFixed(2)} km<br><strong>Duration:</strong> ${(summary.duration/60).toFixed(1)} mins`;
       });
 
-      fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${start[0]}&lon=${start[1]}&appid=${weatherApiKey}&units=metric`)
-        .then(res => res.json())
-        .then(data => {
-          weatherBox.innerHTML = `<strong>Weather:</strong> ${data.weather[0].description}<br>
-                                  <strong>Temperature:</strong> ${data.main.temp}°C`;
-        });
-    });
+    fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${start[0]}&lon=${start[1]}&appid=${weatherApiKey}&units=metric`)
+      .then(res => res.json())
+      .then(data => {
+        weatherBox.innerHTML = `<strong>Weather:</strong> ${data.weather[0].description}<br><strong>Temperature:</strong> ${data.main.temp}°C`;
+      });
   }
 </script>
 </body>

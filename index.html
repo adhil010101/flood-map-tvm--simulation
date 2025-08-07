@@ -7,12 +7,26 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
   <style>
+    :root {
+      --bg-color: #1a1a1a;
+      --text-color: #ffffff;
+      --btn-bg: #333;
+      --btn-hover-bg: #0ff;
+      --btn-hover-text: #000;
+    }
+    body.light-mode {
+      --bg-color: #ffffff;
+      --text-color: #000000;
+      --btn-bg: #eee;
+      --btn-hover-bg: #00c;
+      --btn-hover-text: #fff;
+    }
     body, html {
       margin: 0;
       padding: 0;
       font-family: 'Segoe UI', sans-serif;
-      background: #1a1a1a;
-      color: #fff;
+      background: var(--bg-color);
+      color: var(--text-color);
     }
     #map {
       width: 100vw;
@@ -27,7 +41,7 @@
       top: 10px;
       left: 10px;
       width: 300px;
-      color: #fff;
+      color: var(--text-color);
       box-shadow: 0 0 20px rgba(0,255,255,0.4);
     }
     select, button, input {
@@ -36,12 +50,12 @@
       margin: 8px 0;
       border-radius: 8px;
       border: none;
-      background: #333;
-      color: white;
+      background: var(--btn-bg);
+      color: var(--text-color);
     }
     button:hover {
-      background: #0ff;
-      color: #000;
+      background: var(--btn-hover-bg);
+      color: var(--btn-hover-text);
       cursor: pointer;
       transition: 0.3s;
     }
@@ -55,6 +69,9 @@
       background: yellow;
       border-radius: 50%;
       animation: blink 1s infinite;
+    }
+    #darkToggle {
+      margin-top: 10px;
     }
     @keyframes blink {
       0% { opacity: 1; }
@@ -87,6 +104,7 @@
     <option value="8.4861,76.9496">Shangumugham</option>
   </select>
   <button onclick="calculateRoute()">Get Route</button>
+  <button id="darkToggle" onclick="toggleDarkMode()">Toggle Light/Dark Mode</button>
   <div id="info"></div>
   <div id="weather"></div>
 </div>
@@ -97,8 +115,9 @@
 <script>
   const apiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0=";
   const weatherApiKey = "b3bbd7748a865056c51ac3458d4851bc";
-
+  let routeLayer = null;
   const trivandrumBounds = L.latLngBounds([8.3, 76.7], [8.7, 77.2]);
+
   const map = L.map('map', {
     maxBounds: trivandrumBounds,
     minZoom: 11,
@@ -120,7 +139,15 @@
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       userLatLng = [lat, lng];
-      L.marker(userLatLng).addTo(map).bindPopup("You are here").openPopup();
+      const marker = L.circleMarker(userLatLng, {
+        radius: 8,
+        fillColor: "blue",
+        color: "white",
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.9
+      }).addTo(map).bindPopup("You are here").openPopup();
+      map.setView(userLatLng, 13);
     });
   }
 
@@ -134,12 +161,14 @@
     const start = startVal === "current" && userLatLng ? userLatLng : startVal.split(',').map(Number);
     if (!start || !end) return alert("Invalid start or end point.");
 
+    if (routeLayer) map.removeLayer(routeLayer);
+
     fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}&geometry_format=geojson&instructions=false`)
       .then(res => res.json())
       .then(data => {
         const coords = data.features[0].geometry.coordinates.map(p => [p[1], p[0]]);
-        L.polyline(coords, { color: 'cyan', weight: 6, dashArray: '5, 10' }).addTo(map);
-        map.panInsideBounds(trivandrumBounds);
+        routeLayer = L.polyline(coords, { color: 'blue', weight: 6 }).addTo(map);
+        map.fitBounds(routeLayer.getBounds());
         const summary = data.features[0].properties.summary;
         info.innerHTML = `<strong>Distance:</strong> ${(summary.distance/1000).toFixed(2)} km<br><strong>Duration:</strong> ${(summary.duration/60).toFixed(1)} mins`;
       });
@@ -149,6 +178,10 @@
       .then(data => {
         weatherBox.innerHTML = `<strong>Weather:</strong> ${data.weather[0].description}<br><strong>Temperature:</strong> ${data.main.temp}°C`;
       });
+  }
+
+  function toggleDarkMode() {
+    document.body.classList.toggle("light-mode");
   }
 </script>
 </body>

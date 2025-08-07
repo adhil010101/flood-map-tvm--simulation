@@ -1,3 +1,19 @@
+var map = L.map('map', {
+    maxBounds: [
+        [8.35, 76.75],
+        [8.65, 77.1]
+    ],
+    minZoom: 10,
+    maxZoom: 18
+}).setView([8.45, 76.9], 12);
+
+// Add OpenStreetMap tiles
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Add icons
+var markerGroup = L.layerGroup().addTo(map);
 // Create map centered at Trivandrum
 var map = L.map('map', {
     maxBounds: [

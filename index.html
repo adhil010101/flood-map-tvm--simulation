@@ -1,239 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Flood Alert — Trivandrum (Prototype)</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <style>
-    :root{--bg:#0f1720;--panel:#0b1220;--text:#e6eef6;--muted:#9fb0c8;--accent:#16a34a;--danger:#ef4444;--warn:#f59e0b;--prob:#2563eb}
-    body.light{--bg:#f6fbff;--panel:#ffffff;--text:#0b1220;--muted:#475569}
-    *{box-sizing:border-box}
-    html,body,#map{height:100%;margin:0;padding:0}
-    body{font-family:Inter,Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
-
-    /* Left control - only start/dest */
-    #leftControl{position:absolute;left:12px;top:12px;z-index:1200;width:320px;background:var(--panel);padding:14px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-    #leftControl label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-    #leftControl select,#leftControl button{width:100%;padding:10px;margin-bottom:8px;border-radius:8px;border:0;background:#071025;color:var(--text);font-size:14px}
-    #leftControl button{background:linear-gradient(90deg,#06b6d4,#3b82f6);cursor:pointer}
-
-    /* Right-bottom control - layers */
-    #rightControl{position:absolute;right:12px;bottom:12px;z-index:1200;width:220px;background:var(--panel);padding:12px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-    .toggle-row{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
-    .toggle-row button{flex:0 0 80px;padding:8px;border-radius:8px;border:0;background:#071025;color:var(--text)}
-
-    /* Alert banner */
-    #alertBanner{position:absolute;left:50%;transform:translateX(-50%);top:12px;z-index:1300;min-width:320px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,rgba(239,68,68,0.95),rgba(244,63,94,0.95));color:white;display:none;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,0.4);cursor:pointer}
-
-    /* Legend bottom-left */
-    #legend{position:absolute;left:12px;bottom:12px;z-index:1200;background:var(--panel);padding:10px;border-radius:10px;color:var(--muted);font-size:13px}
-    .legend-row{display:flex;align-items:center;gap:8px;margin:6px 0}
-    .swatch{width:18px;height:10px;border-radius:4px}
-
-    /* route styling classes */
-    .main-route{stroke:#1e40af;stroke-width:6;}
-    .danger-route{stroke:#ef4444;stroke-width:6;stroke-dasharray:10 8;filter:drop-shadow(0 0 6px rgba(239,68,68,0.8));}
-    .alt-route{stroke:#16a34a;stroke-width:6;filter:drop-shadow(0 0 8px rgba(22,163,74,0.9));}
-
-    /* small helper */
-    .muted{color:var(--muted);font-size:13px}
-
-    /* mobile tweaks */
-    @media (max-width:640px){#leftControl{width:90%;left:5%;top:8px}#rightControl{width:45%;right:5%;bottom:8px}}
-    /* loader */
-    #loader{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1400;padding:12px 16px;background:rgba(0,0,0,0.6);color:#fff;border-radius:8px;display:none}
-  </style>
+<meta charset="utf-8">
+<title>Flood Alert Navigation - Trivandrum</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+<style>
+  body { margin: 0; padding: 0; }
+  #map { width: 100%; height: 100vh; }
+  .control-buttons {
+    position: absolute;
+    top: 10px;
+    left: 50px;
+    z-index: 1000;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0,0,0,0.3);
+  }
+  .alert {
+    background: red;
+    color: white;
+    padding: 5px;
+    margin-top: 5px;
+    font-weight: bold;
+    border-radius: 5px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+</style>
 </head>
 <body>
-  <div id="alertBanner"></div>
 
-  <div id="leftControl">
-    <label for="start">Starting point</label>
-    <select id="start">
-      <option value="current">Current location</option>
-      <option value="8.3986,77.0806">Neyyattinkara</option>
-      <option value="8.5241,76.9366">Trivandrum Central</option>
-      <option value="8.5577,76.8812">Technopark</option>
-      <option value="8.5729,76.9366">Kazhakkoottam</option>
-      <option value="8.5074,76.9795">Kovalam</option>
-    </select>
+<div id="map"></div>
+<div class="control-buttons">
+  <label>Destination: </label>
+  <select id="destination">
+    <option value="8.5241,76.9366">Trivandrum Central</option>
+    <option value="8.5482,76.9366">Medical College</option>
+    <option value="8.5392,76.9784">Kazhakoottam</option>
+  </select>
+  <button onclick="planRoute()">Go</button>
+  <div id="alertBox"></div>
+</div>
 
-    <label for="end">Destination</label>
-    <select id="end">
-      <option value="8.4826,76.9203">Trivandrum Airport</option>
-      <option value="8.5241,76.9366">Trivandrum Central</option>
-      <option value="8.5577,76.8812">Technopark</option>
-      <option value="8.5074,76.9795">Kovalam</option>
-      <option value="8.4861,76.9496">Shangumugham</option>
-    </select>
+<script>
+let map = L.map('map').setView([8.5241, 76.9366], 13);
 
-    <button id="goBtn">Find fast & safe route</button>
-    <div class="muted" id="routeInfo" style="margin-top:8px"></div>
-  </div>
+// Base map
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
 
-  <div id="rightControl">
-    <div class="toggle-row"><div class="muted">Simulation</div><button id="simToggle">ON</button></div>
-    <div class="toggle-row"><div class="muted">High (red)</div><button id="showHigh">ON</button></div>
-    <div class="toggle-row"><div class="muted">Probable (blue)</div><button id="showProb">ON</button></div>
-    <div class="toggle-row"><div class="muted">Mild (yellow)</div><button id="showLow">ON</button></div>
-    <div class="toggle-row"><div class="muted">Rain overlay</div><button id="rainToggle">ON</button></div>
-  </div>
+// Flood zones simulation
+let highFlood = L.circle([8.5300, 76.9400], { radius: 800, color: "red", fillColor: "red", fillOpacity: 0.4 }).addTo(map);
+let mediumFlood = L.circle([8.5200, 76.9500], { radius: 700, color: "blue", fillColor: "blue", fillOpacity: 0.3 }).addTo(map);
+let lowFlood = L.circle([8.5350, 76.9600], { radius: 600, color: "yellow", fillColor: "yellow", fillOpacity: 0.3 }).addTo(map);
 
-  <div id="legend">
-    <div class="legend-row"><div class="swatch" style="background:var(--danger)"></div><div>High flood</div></div>
-    <div class="legend-row"><div class="swatch" style="background:var(--prob)"></div><div>Probable / Moderate</div></div>
-    <div class="legend-row"><div class="swatch" style="background:var(--warn)"></div><div>Mild / Low</div></div>
-    <div class="legend-row"><div class="swatch" style="background:var(--accent)"></div><div>Safe route</div></div>
-  </div>
+// Route planning with GraphHopper
+function planRoute() {
+  let start = [8.5241, 76.9366]; // Default starting point
+  let dest = document.getElementById('destination').value.split(",");
+  let end = [parseFloat(dest[0]), parseFloat(dest[1])];
 
-  <div id="loader">Loading route…</div>
-  <div id="map"></div>
+  let apiKey = "363c2df2-baa1-4e35-b1b9-9ceb7fc3eed1";
+  let url = `https://graphhopper.com/api/1/route?point=${start[0]},${start[1]}&point=${end[0]},${end[1]}&vehicle=car&points_encoded=false&key=${apiKey}`;
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.polylinedecorator/1.7.0/leaflet.polylineDecorator.min.js"></script>
-  <script>
-    /* ----------------- CONFIG - put your API keys here ----------------- */
-    const ORS_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImViOTBkMjI4ZGUyNDRkMzg5MGU1ZWVkNjU0MDU0Y2MzIiwiaCI6Im11cm11cjY0In0=';
-    const OWM_KEY = 'ce70bf8bdb2bbf3ad192ee196735d6cf';
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      if (!data.paths || data.paths.length === 0) {
+        alert("No route found!");
+        return;
+      }
 
-    /* ----------------- Map Init & bounds ----------------- */
-    const bounds = L.latLngBounds([8.3,76.7],[8.7,77.2]);
-    const map = L.map('map',{minZoom:11,maxZoom:18,zoomControl:true,maxBounds:bounds}).setView([8.5241,76.9366],13);
+      let coords = data.paths[0].points.coordinates.map(c => [c[1], c[0]]);
+      L.polyline(coords, { color: "red", weight: 5, dashArray: "5, 10" }).addTo(map);
 
-    const lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-    const rainLayer = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`,{opacity:0.6});
-    let rainOn = true; rainLayer.addTo(map);
+      // Alternative safe route simulation (Green)
+      let safeCoords = coords.map(([lat, lon]) => [lat + 0.002, lon + 0.002]);
+      L.polyline(safeCoords, { color: "green", weight: 5 }).addTo(map);
 
-    /* ----------------- Fake / simulated flood zones (prototype) ----------------- */
-    const zones = [
-      {id:'z1',center:[8.528,76.94],baseRadius:420,severity:'high',layer:null},
-      {id:'z2',center:[8.515,76.955],baseRadius:360,severity:'probable',layer:null},
-      {id:'z3',center:[8.503,76.93],baseRadius:300,severity:'low',layer:null},
-      {id:'z4',center:[8.544,76.9],baseRadius:280,severity:'probable',layer:null},
-      {id:'z5',center:[8.49,76.98],baseRadius:350,severity:'high',layer:null}
-    ];
+      document.getElementById('alertBox').innerHTML = `<div class="alert">Flooded road detected! Alternative route in green.</div>`;
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Error fetching route. Check API key or network.");
+    });
+}
+</script>
 
-    let simOn = true; let showHigh=true, showProb=true, showLow=true;
-
-    function severityColor(s){ if(s==='high') return getComputedStyle(document.documentElement).getPropertyValue('--danger').trim()||'#ef4444'; if(s==='probable') return getComputedStyle(document.documentElement).getPropertyValue('--prob').trim()||'#2563eb'; return getComputedStyle(document.documentElement).getPropertyValue('--warn').trim()||'#f59e0b'; }
-
-    function renderZones(){
-      zones.forEach(z=>{
-        if(z.layer){ try{ map.removeLayer(z.layer) }catch(e){} }
-        const color = severityColor(z.severity);
-        const circle = L.circle(z.center,{radius:z.baseRadius,color:color,fillColor:color,fillOpacity:0.12,weight:2,dashArray:'6,8'});
-        const div = L.divIcon({className:'pulse-circle',html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};box-shadow:0 0 18px ${color};opacity:0.95"></div>`,iconSize:[18,18]});
-        const marker = L.marker(z.center,{icon:div});
-        z.layer = L.layerGroup([circle,marker]);
-        if((z.severity==='high' && !showHigh) || (z.severity==='probable' && !showProb) || (z.severity==='low' && !showLow)) map.removeLayer(z.layer); else map.addLayer(z.layer);
-      });
-    }
-    renderZones();
-
-    // dynamic simulation: radius jitter + occasional severity change
-    setInterval(()=>{ if(!simOn) return; zones.forEach(z=>{ const jitter=Math.floor((Math.random()-0.5)*80); z.baseRadius=Math.max(160,z.baseRadius+jitter); if(Math.random()<0.06){ const r=Math.random(); z.severity = r<0.25? 'high' : r<0.7? 'probable' : 'low'; } }); renderZones(); },3000);
-
-    /* ----------------- helpers ----------------- */
-    function haversine(lat1,lon1,lat2,lon2){ const R=6371000; const toRad=Math.PI/180; const dLat=(lat2-lat1)*toRad; const dLon=(lon2-lon1)*toRad; const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)*Math.sin(dLon/2); const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); return R*c; }
-
-    function circleToPolygon(center,radiusMeters,steps=32){ const lat=center[0], lon=center[1]; const R=6378137; const coords=[]; for(let i=0;i<steps;i++){ const brng=(i*(360/steps))*Math.PI/180; const lat2 = Math.asin(Math.sin(lat*Math.PI/180)*Math.cos(radiusMeters/R) + Math.cos(lat*Math.PI/180)*Math.sin(radiusMeters/R)*Math.cos(brng)); const lon2 = (lon*Math.PI/180) + Math.atan2(Math.sin(brng)*Math.sin(radiusMeters/R)*Math.cos(lat*Math.PI/180), Math.cos(radiusMeters/R)-Math.sin(lat*Math.PI/180)*Math.sin(lat2)); coords.push([ (lon2*180/Math.PI), (lat2*180/Math.PI) ]); } coords.push(coords[0]); return [coords]; }
-
-    /* ----------------- route logic ----------------- */
-    let currentRoute=null, altRoute=null, routeMarker=null, altMarker=null, dangerSegments=[];
-
-    function clearRouteGraphics(){ if(currentRoute) { try{ map.removeLayer(currentRoute);}catch(e){} currentRoute=null; } dangerSegments.forEach(s=>{ try{ map.removeLayer(s);}catch(e){} }); dangerSegments=[]; if(altRoute){ try{ map.removeLayer(altRoute);}catch(e){} altRoute=null; } if(routeMarker){ try{ clearInterval(routeMarker._tid)}catch(e){} try{ map.removeLayer(routeMarker);}catch(e){} routeMarker=null; } if(altMarker){ try{ clearInterval(altMarker._tid)}catch(e){} try{ map.removeLayer(altMarker);}catch(e){} altMarker=null; } document.getElementById('routeInfo').innerText=''; hideAlert(); }
-
-    async function fetchRoute(startLatLng,endLatLng,avoidPolygons=null){ const body={coordinates:[[startLatLng[1],startLatLng[0]],[endLatLng[1],endLatLng[0]]],geometry_format:'geojson',preference:'fastest'}; if(avoidPolygons) body.avoid_polygons=avoidPolygons; const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{method:'POST',headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!res.ok) throw new Error('Route fetch failed'); return await res.json(); }
-
-    function splitSegmentsInsideZones(coords){ const segments=[]; let seg=null; coords.forEach((pt,idx)=>{ const insideAny = zones.some(z=> haversine(pt[0],pt[1],z.center[0],z.center[1]) <= z.baseRadius ); if(insideAny){ if(!seg) seg=[]; seg.push(pt); } else { if(seg){ segments.push(seg); seg=null;} } }); if(seg) segments.push(seg); return segments; }
-
-    function drawAnimatedPolyline(polyline,options){ const pl = L.polyline(polyline,options).addTo(map); let offset=0; const id=setInterval(()=>{ offset=(offset+1)%40; pl.setStyle({dashOffset:String(offset)}); },80); pl._animateId=id; return pl; }
-
-    function animateMarkerAlong(polyCoords,color){ if(polyCoords.length<2) return null; const m = L.circleMarker(polyCoords[0],{radius:6,fillColor:color,color:'#fff',weight:2}).addTo(map); let i=0; const tid=setInterval(()=>{ i=(i+1)%polyCoords.length; m.setLatLng(polyCoords[i]); },140); m._tid=tid; return m; }
-
-    function decorateWithArrows(polyline,color){ try{ const decorator = L.polylineDecorator(polyline, {patterns:[{offset:'6%',repeat:'10%',symbol:L.Symbol.arrowHead({pixelSize:10,polygon:false,pathOptions:{stroke:true,weight:2,color:color}})}]}); return decorator.addTo(map);}catch(e){return null;} }
-
-    function showLoader(on){ document.getElementById('loader').style.display = on? 'block':'none'; }
-
-    async function calculateAndShow(){ try{ clearRouteGraphics(); showLoader(true); const startVal=document.getElementById('start').value; const endVal=document.getElementById('end').value; const dest=endVal.split(',').map(Number); const start = startVal==='current' && userPos? userPos : startVal.split(',').map(Number); if(!start||!dest) return alert('Please choose start and destination');
-
-        // fetch main route
-        const routeData = await fetchRoute(start,dest);
-        const coords = routeData.features[0].geometry.coordinates.map(c=>[c[1],c[0]]);
-        currentRoute = L.polyline(coords,{color:'#1e40af',weight:6,className:'main-route'}).addTo(map);
-        decorateWithArrows(currentRoute,'#1e40af');
-        map.fitBounds(currentRoute.getBounds(),{padding:[80,80]});
-        routeMarker = animateMarkerAlong(coords,'#1e40af');
-
-        // route summary
-        const mainDist = (routeData.features[0].properties.summary.distance/1000).toFixed(2);
-        const mainDur = (routeData.features[0].properties.summary.duration/60).toFixed(1);
-
-        // Find danger segments
-        const danger = splitSegmentsInsideZones(coords);
-        if(danger.length>0){
-          // mark danger segments
-          danger.forEach(seg=>{ const segLine = drawAnimatedPolyline(seg,{color:'#ef4444',weight:6,dashArray:'10,8',className:'danger-route'}); dangerSegments.push(segLine); });
-
-          // prepare avoid polygons (zones that intersect)
-          const affectedZones = zones.filter(z=> coords.some(pt=> haversine(pt[0],pt[1],z.center[0],z.center[1]) <= z.baseRadius));
-          const multipoly = { type:'MultiPolygon', coordinates: affectedZones.map(z=> circleToPolygon(z.center,z.baseRadius)) };
-
-          // request alternate route avoiding these polygons
-          try{ const altData = await fetchRoute(start,dest,multipoly); const altCoords = altData.features[0].geometry.coordinates.map(c=>[c[1],c[0]]);
-              altRoute = L.polyline(altCoords,{color:'#16a34a',weight:6,className:'alt-route'}).addTo(map);
-              decorateWithArrows(altRoute,'#16a34a');
-              altMarker = animateMarkerAlong(altCoords,'#16a34a');
-
-              const altDist = (altData.features[0].properties.summary.distance/1000).toFixed(2);
-              const altDur = (altData.features[0].properties.summary.duration/60).toFixed(1);
-              document.getElementById('routeInfo').innerText = `Main: ${mainDist} km · ${mainDur} min — Alt: ${altDist} km · ${altDur} min (safer)`;
-
-              showAlert(`⚠️ Flood on main route — safe alternate shown. Tap to center on safe route`,true,()=>{ if(altRoute) map.fitBounds(altRoute.getBounds(),{padding:[80,80]}); });
-
-              // also add a small safe-route button in routeInfo
-              const info = document.getElementById('routeInfo'); const btn = document.createElement('button'); btn.innerText='Take Safe Route'; btn.style.marginLeft='8px'; btn.style.padding='6px 8px'; btn.style.borderRadius='6px'; btn.onclick = ()=>{ takeSafeRoute(); }; info.appendChild(btn);
-
-          }catch(e){ console.warn('Alt route failed',e); document.getElementById('routeInfo').innerText = `Main: ${mainDist} km · ${mainDur} min · No alternate found`; }
-
-        } else {
-          document.getElementById('routeInfo').innerText = `Main: ${mainDist} km · ${mainDur} min`;
-        }
-
-      }catch(err){ console.error(err); alert('Could not fetch route — check ORS API key & network'); }
-      finally{ showLoader(false); }
-    }
-
-    function takeSafeRoute(){ if(!altRoute) return; // remove main route visuals
-      if(currentRoute) { try{ map.removeLayer(currentRoute); }catch(e){} currentRoute=null; }
-      if(routeMarker){ try{ clearInterval(routeMarker._tid);}catch(e){} try{ map.removeLayer(routeMarker);}catch(e){} routeMarker=null; }
-      // restyle altRoute to be primary
-      if(altRoute) altRoute.setStyle({color:'#064e3b',weight:7}); if(altMarker) {/* keep anim */}
-      hideAlert(); document.getElementById('routeInfo').innerText += ' · Safe route active';
-    }
-
-    /* ----------------- UI helpers: alert banner ----------------- */
-    function showAlert(text,withAction=false,action){ const b=document.getElementById('alertBanner'); b.style.display='block'; b.innerHTML = text; if(withAction){ b.style.cursor='pointer'; b.onclick = ()=>{ action && action(); b.style.display='none'; } } }
-    function hideAlert(){ const b=document.getElementById('alertBanner'); b.style.display='none'; b.onclick=null }
-
-    /* ----------------- toggles ----------------- */
-    document.getElementById('simToggle').addEventListener('click',()=>{ simOn=!simOn; document.getElementById('simToggle').innerText=simOn?'ON':'OFF'; });
-    document.getElementById('showHigh').addEventListener('click',()=>{ showHigh=!showHigh; document.getElementById('showHigh').innerText=showHigh?'ON':'OFF'; renderZones(); });
-    document.getElementById('showProb').addEventListener('click',()=>{ showProb=!showProb; document.getElementById('showProb').innerText=showProb?'ON':'OFF'; renderZones(); });
-    document.getElementById('showLow').addEventListener('click',()=>{ showLow=!showLow; document.getElementById('showLow').innerText=showLow?'ON':'OFF'; renderZones(); });
-    document.getElementById('rainToggle').addEventListener('click',()=>{ rainOn=!rainOn; document.getElementById('rainToggle').innerText=rainOn?'ON':'OFF'; if(rainOn) map.addLayer(rainLayer); else map.removeLayer(rainLayer); });
-
-    /* ----------------- current user location */
-    let userPos=null; if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(p=>{ userPos=[p.coords.latitude,p.coords.longitude]; const m=L.circleMarker(userPos,{radius:9,fillColor:'#06b6d4',color:'#fff',weight:2}).addTo(map); m.getElement && m.getElement().classList.add('bounce'); }); }
-
-    /* ----------------- events ----------------- */
-    document.getElementById('end').addEventListener('change',()=>{ calculateAndShow(); });
-    document.getElementById('goBtn').addEventListener('click',()=>{ calculateAndShow(); });
-
-    /* -------------- small safety: show notice if API keys not set -------------- */
-    setTimeout(()=>{ if(!ORS_KEY || ORS_KEY.includes('YOUR')){ alert('Note: OpenRouteService API key not set. Paste your ORS key into the code (ORS_KEY) to get real routes. Without it the prototype will try and fail.'); } if(!OWM_KEY || OWM_KEY.includes('YOUR')){ console.warn('OpenWeatherMap key missing — rain overlay will not show live rain.'); } },800);
-
-  </script>
 </body>
 </html>

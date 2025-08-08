@@ -1,102 +1,669 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Trivandrum Flood Navigation</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<style>
-  body { margin:0; font-family: Arial, sans-serif; background:#f4f4f4; }
-  #map { height: 90vh; width: 100%; }
-  .controls {
-    padding: 10px; background: white; display: flex; gap: 10px; 
-    justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-  }
-  .dark-mode { background:#222; color:white; }
-  .dark-mode .controls { background:#333; }
-  .btn {
-    padding: 8px 12px; border:none; cursor:pointer; border-radius:5px;
-    background:#007bff; color:white; font-weight:bold;
-  }
-  .btn:hover { opacity:0.9; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flood Alert — Trivandrum (Prototype)</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    :root{
+      --bg:#0f1720;--panel:#0b1220;--text:#e6eef6;--muted:#9fb0c8;
+      --accent:#16a34a;--danger:#ef4444;--warn:#f59e0b;--prob:#2563eb;
+      --glass: rgba(255,255,255,0.06);
+    }
+    body.light{ --bg:#f6fbff; --panel:#ffffff; --text:#0b1220; --muted:#475569; --glass: rgba(0,0,0,0.03); }
+    *{box-sizing:border-box}
+    html,body,#map{height:100%;margin:0;padding:0}
+    body{font-family:Inter,Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+
+    /* Controls */
+    #leftControl{
+      position:absolute;left:12px;top:12px;z-index:1200;width:360px;
+      background:var(--panel);padding:14px;border-radius:12px;
+      box-shadow:0 8px 30px rgba(2,6,23,0.6);
+    }
+    #leftControl label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    #leftControl .row{display:flex;gap:8px}
+    #leftControl input[type="text"], #leftControl select, #leftControl button{
+      width:100%;padding:10px;margin-bottom:8px;border-radius:8px;border:0;background:#071025;color:var(--text);font-size:14px;
+    }
+    #leftControl small{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+
+    /* Right bottom control - toggles */
+    #rightControl{
+      position:absolute;right:12px;bottom:12px;z-index:1200;width:260px;
+      background:var(--panel);padding:12px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);
+    }
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
+    .toggle-row button{flex:0 0 80px;padding:8px;border-radius:8px;border:0;background:#071025;color:var(--text);cursor:pointer}
+
+    /* Legend */
+    #legend{position:absolute;left:12px;bottom:12px;z-index:1200;background:var(--panel);padding:10px;border-radius:10px;color:var(--muted);font-size:13px}
+    .legend-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+    .swatch{width:18px;height:10px;border-radius:4px}
+
+    /* Alert banner */
+    #alertBanner{
+      position:absolute;left:50%;transform:translateX(-50%);top:12px;z-index:1300;
+      min-width:320px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,rgba(239,68,68,0.95),rgba(244,63,94,0.95));
+      color:white;display:none;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,0.4);cursor:pointer
+    }
+
+    /* Loader */
+    #loader{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1400;padding:12px 16px;background:rgba(0,0,0,0.6);color:#fff;border-radius:8px;display:none}
+
+    /* Admin modal */
+    #adminBtn{position:absolute;right:12px;top:12px;z-index:1400;padding:10px 12px;border-radius:8px;border:0;background:#111;color:var(--text);cursor:pointer}
+    #adminModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:1500}
+    #adminPanel{width:420px;background:var(--panel);padding:16px;border-radius:12px;color:var(--text);box-shadow:0 12px 40px rgba(0,0,0,0.6)}
+    #adminPanel input, #adminPanel select, #adminPanel button{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:0;background:#071025;color:var(--text)}
+    #adminPanel .flex{display:flex;gap:8px}
+
+    /* map height adjustment to make room for top control if needed */
+    #map{height:100%}
+
+    /* small helper text */
+    .muted{color:var(--muted);font-size:13px}
+
+    /* route styles (for CSS classing but Leaflet uses JS styling) */
+    .main-route{stroke:#1e40af;stroke-width:6;}
+    .danger-route{stroke:#ef4444;stroke-width:6;stroke-dasharray:10 8;}
+    .alt-route{stroke:#16a34a;stroke-width:6;}
+  </style>
 </head>
 <body>
+  <div id="alertBanner"></div>
+  <div id="loader">Loading route…</div>
 
-<div class="controls">
-  <input type="text" id="start" placeholder="Start (lat,lng)">
-  <input type="text" id="end" placeholder="Destination (lat,lng)">
-  <button class="btn" onclick="findRoute()">Get Route</button>
-  <button class="btn" onclick="toggleMode()">Light/Dark</button>
-</div>
+  <!-- Admin button -->
+  <button id="adminBtn">Admin</button>
 
-<div id="map"></div>
+  <!-- Left Control: search / start / dest -->
+  <div id="leftControl">
+    <label>Start (type to search or choose Current)</label>
+    <div class="row">
+      <input id="startInput" type="text" placeholder="Search start place or 'Current location'">
+      <button id="useCurrentBtn">Use Current</button>
+    </div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <label>Destination (search)</label>
+    <input id="endInput" type="text" placeholder="Search destination">
 
-<script>
-let darkMode = false;
-let map = L.map('map').setView([8.5241, 76.9366], 13);
+    <div class="row">
+      <button id="findBtn">Find fast & safe route</button>
+      <button id="takeSafeBtn" style="display:none;background:var(--accent)">Take Safe Route</button>
+    </div>
 
-// Base layers
-let lightLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
-let darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap & CARTO' });
-lightLayer.addTo(map);
+    <small class="muted" id="routeInfo"></small>
+    <small class="muted">Tip: type place name, pick from suggestions, then click Find</small>
+  </div>
 
-function toggleMode(){
-  if(darkMode){ map.removeLayer(darkLayer); lightLayer.addTo(map); document.body.classList.remove("dark-mode"); }
-  else { map.removeLayer(lightLayer); darkLayer.addTo(map); document.body.classList.add("dark-mode"); }
-  darkMode = !darkMode;
-}
+  <!-- Right Control: toggles -->
+  <div id="rightControl">
+    <div class="toggle-row"><div class="muted">Simulation</div><button id="simToggle">ON</button></div>
+    <div class="toggle-row"><div class="muted">Show High (red)</div><button id="showHigh">ON</button></div>
+    <div class="toggle-row"><div class="muted">Show Probable (blue)</div><button id="showProb">ON</button></div>
+    <div class="toggle-row"><div class="muted">Show Mild (yellow)</div><button id="showLow">ON</button></div>
+    <div class="toggle-row"><div class="muted">Rain overlay</div><button id="rainToggle">ON</button></div>
+    <div style="margin-top:8px"><button id="modeToggle">Light Mode</button></div>
+  </div>
 
-// Flood zones simulation
-function addFloodZones(){
-  L.circle([8.5200, 76.9350], {radius: 500, color:"red", fillOpacity:0.3}).addTo(map).bindPopup("High Flood Risk");
-  L.circle([8.5300, 76.9400], {radius: 400, color:"blue", fillOpacity:0.3}).addTo(map).bindPopup("Possible Flood");
-  L.circle([8.5400, 76.9450], {radius: 300, color:"yellow", fillOpacity:0.3}).addTo(map).bindPopup("Low Rain Risk");
-}
-addFloodZones();
+  <!-- Legend -->
+  <div id="legend">
+    <div class="legend-row"><div class="swatch" style="background:var(--danger)"></div><div>High flood</div></div>
+    <div class="legend-row"><div class="swatch" style="background:var(--prob)"></div><div>Probable / Moderate</div></div>
+    <div class="legend-row"><div class="swatch" style="background:var(--warn)"></div><div>Mild / Low</div></div>
+    <div class="legend-row"><div class="swatch" style="background:var(--accent)"></div><div>Safe route</div></div>
+  </div>
 
-// GraphHopper routing
-function findRoute(){
-  let startVal = document.getElementById("start").value.split(",");
-  let endVal = document.getElementById("end").value.split(",");
-  let startLat = parseFloat(startVal[0]), startLng = parseFloat(startVal[1]);
-  let endLat = parseFloat(endVal[0]), endLng = parseFloat(endVal[1]);
+  <!-- Map -->
+  <div id="map"></div>
 
-  fetch(`https://graphhopper.com/api/1/route?point=${startLat},${startLng}&point=${endLat},${endLng}&vehicle=car&locale=en&points_encoded=false&key=363c2df2-baa1-4e35-b1b9-9ceb7fc3eed1`)
-  .then(res => res.json())
-  .then(data => {
-    if(data.paths && data.paths.length > 0){
-      let coords = data.paths[0].points.coordinates.map(c => [c[1], c[0]]);
-      L.polyline(coords, {color:"blue", weight:5, dashArray:"5,10"}).addTo(map).bindPopup("Main Route");
+  <!-- Admin Modal -->
+  <div id="adminModal">
+    <div id="adminPanel">
+      <h3 style="margin-top:0">Admin Panel</h3>
+      <div id="adminLogin">
+        <input id="adminId" placeholder="Admin ID (default admin)" />
+        <input id="adminPass" placeholder="Password (default admin123)" type="password" />
+        <button id="adminLoginBtn">Login</button>
+      </div>
 
-      // Simulate a flood in the route & give alternative
-      L.polyline([[8.528, 76.94], [8.532, 76.942]], {color:"red", weight:5, dashArray:"5,5"}).addTo(map).bindPopup("Flooded Area");
-      let altCoords = [
-        [startLat, startLng],
-        [8.526, 76.938],
-        [8.534, 76.946],
-        [endLat, endLng]
-      ];
-      L.polyline(altCoords, {color:"green", weight:5, dashArray:"5,5"}).addTo(map).bindPopup("Alternative Safe Route");
+      <div id="adminTools" style="display:none">
+        <div class="muted">Add flood zone (click map or enter coords)</div>
+        <div class="flex">
+          <input id="zoneLat" placeholder="lat" />
+          <input id="zoneLon" placeholder="lon" />
+        </div>
+        <select id="zoneSeverity">
+          <option value="high">High (red)</option>
+          <option value="probable">Probable (blue)</option>
+          <option value="low">Mild (yellow)</option>
+        </select>
+        <input id="zoneRadius" placeholder="radius meters (e.g. 300)" />
+        <div class="flex">
+          <button id="addZoneBtn">Add Zone</button>
+          <button id="saveZonesBtn">Save</button>
+        </div>
+        <hr />
+        <div class="muted">Existing Zones</div>
+        <div id="zonesList" style="max-height:200px;overflow:auto"></div>
+        <div class="flex"><button id="clearZonesBtn" style="background:#b91c1c">Clear All</button><button id="closeAdminBtn">Close</button></div>
+      </div>
+    </div>
+  </div>
 
-      map.fitBounds(L.latLngBounds(coords));
+  <!-- Leaflet and PolylineDecorator -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.polylinedecorator/1.7.0/leaflet.polylineDecorator.min.js"></script>
+
+  <script>
+  /******************************************************************
+   * CONFIG - Put GraphHopper key and OpenWeatherMap key (you provided)
+   ******************************************************************/
+  const GRAPH_HOPPER_KEY = '363c2df2-baa1-4e35-b1b9-9ceb7fc3eed1';
+  const OWM_KEY = 'ce70bf8bdb2bbf3ad192ee196735d6cf'; // used for rain overlay tile layer
+
+  /******************************************************************
+   * Map init
+   ******************************************************************/
+  const bounds = L.latLngBounds([8.3,76.7],[8.7,77.2]);
+  const map = L.map('map',{minZoom:11,maxZoom:18,zoomControl:true,maxBounds:bounds}).setView([8.5241,76.9366],13);
+
+  const baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+  const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19});
+
+  const rainLayer = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_KEY}`,{opacity:0.6});
+  let rainOn = true; rainLayer.addTo(map);
+
+  /******************************************************************
+   * Fake flood zones (initial set) - can be edited via Admin panel
+   ******************************************************************/
+  let zones = [
+    {id: genId(), center:[8.528,76.94], radius:420, severity:'high'},
+    {id: genId(), center:[8.515,76.955], radius:360, severity:'probable'},
+    {id: genId(), center:[8.503,76.93], radius:300, severity:'low'},
+    {id: genId(), center:[8.544,76.9], radius:280, severity:'probable'},
+    {id: genId(), center:[8.49,76.98], radius:350, severity:'high'}
+  ];
+
+  // Load from localStorage if present
+  try{
+    const saved = localStorage.getItem('flood_zones_v1');
+    if(saved) zones = JSON.parse(saved);
+  }catch(e){ console.warn('Could not parse saved zones', e); }
+
+  let zoneLayers = {}; // map zone.id -> L.layerGroup
+
+  function severityColor(s){
+    if(s==='high') return getCssVar('--danger') || '#ef4444';
+    if(s==='probable') return getCssVar('--prob') || '#2563eb';
+    return getCssVar('--warn') || '#f59e0b';
+  }
+
+  function getCssVar(name){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function renderZones(){
+    // remove existing
+    Object.values(zoneLayers).forEach(l=> { try{ map.removeLayer(l); }catch(e){} });
+    zoneLayers = {};
+    zones.forEach(z=>{
+      const color = severityColor(z.severity);
+      const circle = L.circle(z.center, { radius: z.radius, color: color, fillColor: color, fillOpacity:0.14, weight:2, dashArray:'6,8' });
+      const marker = L.marker(z.center, { icon: L.divIcon({ className:'zone-dot', html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};box-shadow:0 0 10px ${color}"></div>`})});
+      const group = L.layerGroup([circle, marker]).addTo(map);
+      marker.bindPopup(`Flood zone: ${z.severity}<br>radius: ${z.radius}m`);
+      zoneLayers[z.id] = group;
+    });
+  }
+  renderZones();
+
+  // dynamic simulation: jitter radii & occasional severity change (if simOn)
+  let simOn = true, showHigh=true, showProb=true, showLow=true;
+  setInterval(()=>{
+    if(!simOn) return;
+    zones.forEach(z=>{
+      z.radius = Math.max(120, z.radius + Math.floor((Math.random()-0.5)*60));
+      if(Math.random() < 0.06){
+        const r = Math.random();
+        z.severity = r < 0.25 ? 'high' : r < 0.7 ? 'probable' : 'low';
+      }
+    });
+    renderZones();
+    renderAdminList();
+  }, 3000);
+
+  /******************************************************************
+   * Helpers
+   ******************************************************************/
+  function genId(){ return 'z'+Math.random().toString(36).slice(2,9); }
+
+  function showLoader(on){ document.getElementById('loader').style.display = on ? 'block' : 'none'; }
+  function showAlert(text, withAction=false, action=null){
+    const b = document.getElementById('alertBanner');
+    b.style.display = 'block'; b.innerHTML = text;
+    if(withAction){
+      b.style.cursor = 'pointer';
+      b.onclick = ()=>{ action && action(); b.style.display='none'; };
     } else {
-      alert("No route found");
+      b.style.cursor = 'default'; b.onclick = null;
     }
-  })
-  .catch(err => console.error(err));
-}
+  }
+  function hideAlert(){ const b = document.getElementById('alertBanner'); b.style.display='none'; b.onclick = null; }
 
-// Live location
-map.locate({setView:true, maxZoom:15, watch:true});
-map.on('locationfound', e => {
-  L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
-});
-</script>
+  function haversine(lat1,lon1,lat2,lon2){
+    const R=6371000; const toRad=Math.PI/180;
+    const dLat=(lat2-lat1)*toRad; const dLon=(lon2-lon1)*toRad;
+    const a=Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
 
+  function circleToPolygon(center, radiusMeters, steps=32){
+    const lat=center[0], lon=center[1]; const R=6378137; const coords=[];
+    for(let i=0;i<steps;i++){
+      const brng = (i*(360/steps))*Math.PI/180;
+      const lat2 = Math.asin(Math.sin(lat*Math.PI/180)*Math.cos(radiusMeters/R) + Math.cos(lat*Math.PI/180)*Math.sin(radiusMeters/R)*Math.cos(brng));
+      const lon2 = (lon*Math.PI/180) + Math.atan2(Math.sin(brng)*Math.sin(radiusMeters/R)*Math.cos(lat*Math.PI/180), Math.cos(radiusMeters/R)-Math.sin(lat*Math.PI/180)*Math.sin(lat2));
+      coords.push([ (lon2*180/Math.PI), (lat2*180/Math.PI) ]);
+    }
+    coords.push(coords[0]);
+    return [coords];
+  }
+
+  /******************************************************************
+   * Route logic using GraphHopper
+   ******************************************************************/
+  let currentRoute=null, altRoute=null, routeMarker=null, altMarker=null, dangerSegments=[];
+
+  function clearRouteGraphics(){
+    if(currentRoute){ try{ map.removeLayer(currentRoute); }catch(e){} currentRoute=null; }
+    dangerSegments.forEach(s=>{ try{ map.removeLayer(s); }catch(e){} });
+    dangerSegments = [];
+    if(altRoute){ try{ map.removeLayer(altRoute); }catch(e){} altRoute=null; }
+    if(routeMarker){ try{ clearInterval(routeMarker._tid);}catch(e){} try{ map.removeLayer(routeMarker);}catch(e){} routeMarker=null; }
+    if(altMarker){ try{ clearInterval(altMarker._tid);}catch(e){} try{ map.removeLayer(altMarker);}catch(e){} altMarker=null; }
+    document.getElementById('routeInfo').innerText = '';
+    document.getElementById('takeSafeBtn').style.display = 'none';
+    hideAlert();
+  }
+
+  async function ghFetchRoute(pointsArray){
+    // pointsArray = [ [lat,lng], [lat,lng], ... ]
+    const base = 'https://graphhopper.com/api/1/route';
+    const params = new URLSearchParams();
+    for(const p of pointsArray) params.append('point', `${p[0]},${p[1]}`);
+    params.set('vehicle','car');
+    params.set('locale','en');
+    params.set('points_encoded','false');
+    params.set('key', GRAPH_HOPPER_KEY);
+    params.set('instructions','false');
+    const url = `${base}?${params.toString()}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`GraphHopper error ${res.status}`);
+    const data = await res.json();
+    return data;
+  }
+
+  function drawAnimatedPolyline(polyline, options){
+    const pl = L.polyline(polyline, options).addTo(map);
+    let offset = 0;
+    const id = setInterval(()=>{
+      offset = (offset + 1) % 100;
+      pl.setStyle({dashOffset: String(offset)});
+    }, 80);
+    pl._animateId = id;
+    return pl;
+  }
+
+  function animateMarkerAlong(polyCoords,color){
+    if(!polyCoords || polyCoords.length<2) return null;
+    const m = L.circleMarker(polyCoords[0],{radius:6,fillColor:color,color:'#fff',weight:2}).addTo(map);
+    let i = 0;
+    const tid = setInterval(()=>{ i = (i+1) % polyCoords.length; m.setLatLng(polyCoords[i]); }, 120);
+    m._tid = tid;
+    return m;
+  }
+
+  function decorateWithArrows(polyline,color){
+    try{
+      const decorator = L.polylineDecorator(polyline, {
+        patterns: [{ offset: '6%', repeat: '10%', symbol: L.Symbol.arrowHead({pixelSize:10, polygon:false, pathOptions:{stroke:true, weight:2, color:color}})}]
+      });
+      return decorator.addTo(map);
+    }catch(e){ return null; }
+  }
+
+  function splitSegmentsInsideZones(coords){
+    const segments = []; let seg=null;
+    coords.forEach(pt=>{
+      const insideAny = zones.some(z => haversine(pt[0],pt[1],z.center[0],z.center[1]) <= z.radius);
+      if(insideAny){
+        if(!seg) seg = [];
+        seg.push(pt);
+      } else {
+        if(seg){ segments.push(seg); seg=null; }
+      }
+    });
+    if(seg) segments.push(seg);
+    return segments;
+  }
+
+  // compute detour waypoint for a zone: pick a point offset from center that should steer route around
+  function computeDetourPoint(zone, routeCoords){
+    // find point on route nearest to zone center
+    let nearestIdx = 0; let nearestDist = 1e12;
+    routeCoords.forEach((pt,idx) => {
+      const d = haversine(pt[0],pt[1], zone.center[0], zone.center[1]);
+      if(d < nearestDist){ nearestDist = d; nearestIdx = idx; }
+    });
+    // choose angle from zone center to that nearest route point and rotate 90deg to side to avoid
+    const pt = routeCoords[nearestIdx];
+    const angle = Math.atan2(pt[0]-zone.center[0], pt[1]-zone.center[1]); // lat delta, lon delta
+    const perp = angle + Math.PI/2; // perpendicular
+    // offset by 1.2*radius
+    const meters = Math.max(zone.radius*1.2, 200);
+    // convert meters to degrees approx:
+    const dLat = (meters/111000) * Math.cos(perp);
+    const dLon = (meters/(111000 * Math.cos(zone.center[0]*Math.PI/180))) * Math.sin(perp);
+    return [ zone.center[0] + dLat, zone.center[1] + dLon ];
+  }
+
+  async function calculateAndShow(){
+    try{
+      clearRouteGraphics();
+      showLoader(true);
+
+      // get start & end from inputs; start can be "Current location" or lat,lng or named place resolved
+      const startStr = document.getElementById('startInput').value.trim();
+      const endStr = document.getElementById('endInput').value.trim();
+      if(!startStr || !endStr) { alert('Please enter start and destination'); showLoader(false); return; }
+
+      const start = await resolvePlaceToLatLng(startStr);
+      const dest = await resolvePlaceToLatLng(endStr);
+      if(!start || !dest){ alert('Could not resolve places. Try typing and selecting suggestions.'); showLoader(false); return; }
+
+      // Fetch main route
+      const mainData = await ghFetchRoute([start, dest]);
+      if(!mainData.paths || mainData.paths.length===0){ alert('No route found'); showLoader(false); return; }
+      const coords = mainData.paths[0].points.coordinates.map(c => [c[1], c[0]]); // GH returns [lon,lat]
+      currentRoute = L.polyline(coords, { color:'#1e40af', weight:6 }).addTo(map);
+      decorateWithArrows(currentRoute, '#1e40af');
+      routeMarker = animateMarkerAlong(coords, '#1e40af');
+      map.fitBounds(currentRoute.getBounds(), {padding:[80,80]});
+
+      // summary
+      const mainDist = (mainData.paths[0].distance/1000).toFixed(2);
+      const mainDur = (mainData.paths[0].time/60000).toFixed(1);
+      document.getElementById('routeInfo').innerText = `Main: ${mainDist} km · ${mainDur} min`;
+
+      // detect danger segments inside zones
+      const danger = splitSegmentsInsideZones(coords);
+      if(danger.length > 0){
+        // show danger segments animated red
+        danger.forEach(seg => {
+          const segLine = drawAnimatedPolyline(seg, { color:'#ef4444', weight:6, dashArray:'10,8' });
+          dangerSegments.push(segLine);
+        });
+
+        // identify affected zones
+        const affected = zones.filter(z => coords.some(pt => haversine(pt[0],pt[1],z.center[0],z.center[1]) <= z.radius));
+        // build detour points array: one detour per affected zone
+        const detourPoints = affected.map(z => computeDetourPoint(z, coords));
+        // combine start + detours + dest for GH request
+        const pts = [start, ...detourPoints, dest];
+
+        // attempt alternate route avoiding zones by steering via detours
+        try{
+          const altData = await ghFetchRoute(pts);
+          if(altData.paths && altData.paths.length>0){
+            const altCoords = altData.paths[0].points.coordinates.map(c=>[c[1],c[0]]);
+            altRoute = L.polyline(altCoords, { color:'#16a34a', weight:6 }).addTo(map);
+            decorateWithArrows(altRoute, '#16a34a');
+            altMarker = animateMarkerAlong(altCoords, '#16a34a');
+
+            const altDist = (altData.paths[0].distance/1000).toFixed(2);
+            const altDur = (altData.paths[0].time/60000).toFixed(1);
+            document.getElementById('routeInfo').innerText = `Main: ${mainDist} km · ${mainDur} min — Alt: ${altDist} km · ${altDur} min (safer)`;
+
+            // show alert and provide safe route button
+            showAlert('⚠️ Flood on main route — safe alternate shown. Tap banner to center on safe route', true, ()=>{ if(altRoute) map.fitBounds(altRoute.getBounds(), {padding:[80,80]}); });
+            const takeBtn = document.getElementById('takeSafeBtn');
+            takeBtn.style.display = 'inline-block';
+            takeBtn.onclick = ()=>{ takeSafeRoute(); };
+          }
+        }catch(e){
+          console.warn('Alternate route failed:', e);
+          document.getElementById('routeInfo').innerText += ' · No alternate found';
+        }
+      } // end if danger
+
+    }catch(err){
+      console.error(err);
+      alert('Could not fetch route — check GraphHopper API key & network (check console for details).');
+    } finally {
+      showLoader(false);
+    }
+  }
+
+  function takeSafeRoute(){
+    if(!altRoute) return;
+    if(currentRoute){ try{ map.removeLayer(currentRoute); }catch(e){} currentRoute=null; }
+    if(routeMarker){ try{ clearInterval(routeMarker._tid); }catch(e){} try{ map.removeLayer(routeMarker);}catch(e){} routeMarker=null; }
+    altRoute.setStyle({ color:'#064e3b', weight:7 });
+    document.getElementById('routeInfo').innerText += ' · Safe route active';
+    hideAlert();
+  }
+
+  /******************************************************************
+   * Place search (Nominatim) - simple autocomplete
+   ******************************************************************/
+  let nomTimer = null;
+  const startInput = document.getElementById('startInput');
+  const endInput = document.getElementById('endInput');
+
+  // simple suggestion dropdown element
+  function makeSuggestList(inputEl){
+    let wrap = document.createElement('div');
+    wrap.style.position='absolute';
+    wrap.style.zIndex='2000';
+    wrap.style.background = 'var(--panel)';
+    wrap.style.width = (inputEl.getBoundingClientRect().width)+'px';
+    wrap.style.maxHeight = '200px'; wrap.style.overflow='auto'; wrap.style.borderRadius='6px';
+    wrap.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)'; wrap.style.marginTop='-6px';
+    inputEl.parentNode.insertBefore(wrap, inputEl.nextSibling);
+    return wrap;
+  }
+
+  const startSuggest = makeSuggestList(startInput);
+  const endSuggest = makeSuggestList(endInput);
+
+  async function nominatimSearch(q){
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=6`;
+    const res = await fetch(url, { headers:{ 'Accept-Language': 'en' } });
+    if(!res.ok) return [];
+    return await res.json();
+  }
+
+  function attachAutocomplete(inputEl, suggestWrap){
+    inputEl.addEventListener('input', ()=>{
+      clearTimeout(nomTimer);
+      const val = inputEl.value.trim();
+      if(!val){ suggestWrap.innerHTML = ''; return; }
+      nomTimer = setTimeout(async ()=>{
+        const results = await nominatimSearch(val);
+        suggestWrap.innerHTML = '';
+        results.forEach(r=>{
+          const it = document.createElement('div');
+          it.style.padding = '8px'; it.style.cursor='pointer'; it.style.borderBottom='1px solid rgba(255,255,255,0.03)';
+          it.innerText = r.display_name;
+          it.onclick = ()=>{ inputEl.value = r.display_name; inputEl._latlng = [parseFloat(r.lat), parseFloat(r.lon)]; suggestWrap.innerHTML=''; };
+          suggestWrap.appendChild(it);
+        });
+      }, 350);
+    });
+    // hide suggestions on blur
+    inputEl.addEventListener('blur', ()=>{ setTimeout(()=>{ suggestWrap.innerHTML=''; }, 200); });
+  }
+  attachAutocomplete(startInput, startSuggest);
+  attachAutocomplete(endInput, endSuggest);
+
+  async function resolvePlaceToLatLng(text){
+    // if user used 'Current location' or used Use Current button it may store userPos
+    if(text.toLowerCase().includes('current') && userPos) return userPos;
+    // if input has cached latlng from clicking suggestion:
+    if(typeof(text) === 'object' && Array.isArray(text)) return text;
+    // if previously set _latlng property
+    const el = (document.getElementById('startInput').value === text) ? document.getElementById('startInput') : document.getElementById('endInput');
+    if(el && el._latlng) return el._latlng;
+    // try parse lat,lng
+    const m = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+    if(m) return [parseFloat(m[1]), parseFloat(m[3])];
+    // fallback to Nominatim one-off search
+    const r = await nominatimSearch(text);
+    if(r && r.length>0) return [parseFloat(r[0].lat), parseFloat(r[0].lon)];
+    return null;
+  }
+
+  /******************************************************************
+   * Admin panel logic (add/edit zones)
+   ******************************************************************/
+  const adminBtn = document.getElementById('adminBtn');
+  const adminModal = document.getElementById('adminModal');
+  const adminLogin = document.getElementById('adminLogin');
+  const adminTools = document.getElementById('adminTools');
+  const adminLoginBtn = document.getElementById('adminLoginBtn');
+
+  adminBtn.onclick = ()=>{ adminModal.style.display='flex'; };
+
+  adminLoginBtn.onclick = ()=>{
+    const id = document.getElementById('adminId').value.trim() || 'admin';
+    const pw = document.getElementById('adminPass').value.trim() || 'admin123';
+    // default credentials admin/admin123
+    if(id === 'admin' && pw === 'admin123'){
+      adminLogin.style.display='none';
+      adminTools.style.display='block';
+      renderAdminList();
+    } else alert('Wrong credentials. Default: admin / admin123');
+  };
+
+  document.getElementById('closeAdminBtn').onclick = ()=>{ adminModal.style.display='none'; };
+  document.getElementById('zoneLat').addEventListener('input', ()=>{}); // placeholder
+
+  // clicking map while admin panel open fills lat/lon inputs
+  map.on('click', function(e){
+    if(adminTools.style.display === 'block'){
+      document.getElementById('zoneLat').value = e.latlng.lat.toFixed(6);
+      document.getElementById('zoneLon').value = e.latlng.lng.toFixed(6);
+    }
+  });
+
+  document.getElementById('addZoneBtn').onclick = ()=>{
+    const lat = parseFloat(document.getElementById('zoneLat').value);
+    const lon = parseFloat(document.getElementById('zoneLon').value);
+    const radius = parseInt(document.getElementById('zoneRadius').value) || 300;
+    const severity = document.getElementById('zoneSeverity').value;
+    if(!lat || !lon){ alert('Provide lat & lon'); return; }
+    const z = { id: genId(), center:[lat,lon], radius: radius, severity: severity };
+    zones.push(z);
+    saveZones();
+    renderZones();
+    renderAdminList();
+  };
+
+  document.getElementById('saveZonesBtn').onclick = ()=>{ saveZones(); alert('Saved'); };
+  document.getElementById('clearZonesBtn').onclick = ()=>{ if(confirm('Clear all zones?')){ zones=[]; saveZones(); renderZones(); renderAdminList(); } };
+
+  function saveZones(){ try{ localStorage.setItem('flood_zones_v1', JSON.stringify(zones)); }catch(e){ console.warn('Save failed', e); } }
+
+  function renderAdminList(){
+    const el = document.getElementById('zonesList');
+    if(!el) return;
+    el.innerHTML = '';
+    zones.forEach(z=>{
+      const row = document.createElement('div');
+      row.style.padding = '8px'; row.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+      row.innerHTML = `<b>${z.severity.toUpperCase()}</b> ${z.center[0].toFixed(5)}, ${z.center[1].toFixed(5)} — ${z.radius}m <button data-id="${z.id}" style="float:right">Remove</button>`;
+      row.querySelector('button').onclick = (ev)=>{ const id = ev.target.dataset.id; zones = zones.filter(zz=>zz.id !== id); saveZones(); renderZones(); renderAdminList(); };
+      el.appendChild(row);
+    });
+  }
+
+  /******************************************************************
+   * Attach UI events
+   ******************************************************************/
+  document.getElementById('simToggle').addEventListener('click', ()=>{ simOn = !simOn; document.getElementById('simToggle').innerText = simOn ? 'ON':'OFF'; });
+  document.getElementById('showHigh').addEventListener('click', ()=>{ showHigh = !showHigh; document.getElementById('showHigh').innerText = showHigh?'ON':'OFF'; updateZoneVisibility(); });
+  document.getElementById('showProb').addEventListener('click', ()=>{ showProb = !showProb; document.getElementById('showProb').innerText = showProb?'ON':'OFF'; updateZoneVisibility(); });
+  document.getElementById('showLow').addEventListener('click', ()=>{ showLow = !showLow; document.getElementById('showLow').innerText = showLow?'ON':'OFF'; updateZoneVisibility(); });
+  document.getElementById('rainToggle').addEventListener('click', ()=>{ rainOn = !rainOn; document.getElementById('rainToggle').innerText = rainOn?'ON':'OFF'; if(rainOn) map.addLayer(rainLayer); else map.removeLayer(rainLayer); });
+
+  function updateZoneVisibility(){
+    zones.forEach(z=>{
+      const layer = zoneLayers[z.id];
+      if(!layer) return;
+      const show = (z.severity==='high' && showHigh) || (z.severity==='probable' && showProb) || (z.severity==='low' && showLow);
+      if(show && !map.hasLayer(layer)) map.addLayer(layer);
+      if(!show && map.hasLayer(layer)) map.removeLayer(layer);
+    });
+  }
+
+  document.getElementById('modeToggle').addEventListener('click', ()=>{
+    document.body.classList.toggle('light');
+    if(document.body.classList.contains('light')){ darkTiles.remove(); baseTiles.addTo(map); document.getElementById('modeToggle').innerText='Dark Mode'; }
+    else{ baseTiles.remove(); darkTiles.addTo(map); document.getElementById('modeToggle').innerText='Light Mode'; }
+  });
+
+  document.getElementById('findBtn').addEventListener('click', ()=>{ calculateAndShow(); });
+  document.getElementById('useCurrentBtn').addEventListener('click', ()=>{
+    if(userPos) startInput.value = 'Current location';
+    else alert('Allow location permission first');
+  });
+
+  // enable pressing Enter triggers route
+  startInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ calculateAndShow(); } });
+  endInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ calculateAndShow(); } });
+
+  attachGlobalAutocomplete(); // wire up search boxes
+
+  /******************************************************************
+   * Current location watcher
+   ******************************************************************/
+  let userPos = null;
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(p=>{
+      userPos = [p.coords.latitude, p.coords.longitude];
+      const m = L.circleMarker(userPos,{radius:9,fillColor:'#06b6d4',color:'#fff',weight:2}).addTo(map);
+      m.bindPopup('You are here').openPopup();
+    }, (err)=>{
+      console.warn('Geolocation denied or failed', err);
+    });
+    // watchPosition can be added for live tracking if desired
+  }
+
+  /******************************************************************
+   * Utility: attach autocomplete helpers wrapper (called above)
+   ******************************************************************/
+  function attachGlobalAutocomplete(){
+    // already attached earlier - but ensure hooking suggest lists
+    // no-op here; suggestions are created at top
+  }
+
+  /******************************************************************
+   * Safety notice about API key
+   ******************************************************************/
+  setTimeout(()=>{
+    if(!GRAPH_HOPPER_KEY || GRAPH_HOPPER_KEY.includes('YOUR')) alert('Warning: GraphHopper key not set.');
+    if(!OWM_KEY || OWM_KEY.includes('YOUR')) console.warn('OpenWeatherMap key not set — rain overlay may not work.');
+  }, 700);
+
+  // initial admin list render
+  renderAdminList();
+
+  </script>
 </body>
 </html>
